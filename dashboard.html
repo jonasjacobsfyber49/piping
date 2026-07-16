@@ -61,7 +61,7 @@
         }
         .board{
             display:grid;
-            grid-template-columns:repeat(4,1fr); /* Veranderd naar 4 kolommen */
+            grid-template-columns:repeat(4,1fr);
             gap:18px;
         }
         .column {
@@ -148,6 +148,31 @@
             color:#888;
             font-size:14px;
         }
+        
+        /* KLAPBAAR ARCHIVE CSS */
+        .column[data-status="archive"] {
+            transition: width 0.3s ease, min-width 0.3s ease;
+            cursor: pointer;
+        }
+        .column.collapsed {
+            min-width: 50px !important;
+            width: 50px !important;
+            padding: 12px 5px;
+            background: #dfdad0;
+            overflow: hidden;
+        }
+        .column.collapsed .column-header {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            align-items: center;
+            gap: 15px;
+            height: 100%;
+            margin-bottom: 0;
+        }
+        .column.collapsed .cards {
+            display: none;
+        }
+
         .modalOverlay{
             position:fixed;
             inset:0;
@@ -285,9 +310,9 @@
         <div class="cards" id="done"></div>
     </div>
 
-    <div class="column" data-status="archive">
+    <div class="column collapsed" data-status="archive" id="col-archive">
         <div class="column-header">
-            <span>Archive (Besproken)</span>
+            <span>Archive</span>
             <span class="count" id="count-archive">0</span>
         </div>
         <div class="cards" id="archive"></div>
@@ -354,6 +379,7 @@ let comments = [];
 let currentFilter = "all";
 let editingTask = null;
 let draggedTask = null;
+let isUpdatingDatabase = false;
 let isModalOpen = false; 
 
 async function loadTasks() {
@@ -454,7 +480,7 @@ function renderBoard() {
     renderColumn("todo");
     renderColumn("inprogress");
     renderColumn("done");
-    renderColumn("archive"); // Render de nieuwe kolom
+    renderColumn("archive");
 }
 
 function renderColumn(status) {
@@ -478,7 +504,6 @@ function renderColumn(status) {
 
         const commentCount = task.comments ? task.comments.length : 0;
         
-        // Formatteer de datum alleen als deze bestaat
         let dueDateHtml = "";
         if (task.due_date) {
             const dateObj = new Date(task.due_date);
@@ -545,7 +570,6 @@ function openTask(id){
     document.getElementById("taskStatus").value = editingTask.status || "todo";
     document.getElementById("taskDueDate").value = editingTask.due_date || "";
 
-    // 🔒 EIS CONTROLE: Je mag een taak alleen naar Archive zetten als de status AL 'done' of 'archive' is.
     const archiveOption = document.getElementById("statusOptArchive");
     if (editingTask.status === "done" || editingTask.status === "archive") {
         archiveOption.disabled = false;
@@ -611,7 +635,7 @@ document.getElementById("saveTaskBtn").onclick = async () => {
 
     const owner = document.getElementById("taskOwner").value;
     const status = document.getElementById("taskStatus").value;
-    const dueDate = document.getElementById("taskDueDate").value || null; // Sla null op als leeg gelaten
+    const dueDate = document.getElementById("taskDueDate").value || null;
 
     if(editingTask){
         await updateTask(editingTask.id, { text, owner, status, due_date: dueDate });
@@ -670,16 +694,13 @@ document.getElementById("addTask").onclick = () => {
     document.getElementById("taskOwner").value = "jonas";
     document.getElementById("taskStatus").value = "todo";
     document.getElementById("taskDueDate").value = "";
-    document.getElementById("statusOptArchive").disabled = true; // Nieuwe taak kan niet direct gearchiveerd worden
+    document.getElementById("statusOptArchive").disabled = true; 
     document.getElementById("commentsContainer").innerHTML = "";
 };
 
 // =========================
 // DRAG & DROP
 // =========================
-
-let isUpdatingDatabase = false;
-
 function handleDragStart(e){
     draggedTask = e.target.dataset.id;
     e.target.classList.add("dragging");
@@ -693,12 +714,10 @@ function handleDragEnd(e){
 document.querySelectorAll(".cards").forEach(container => {
     container.addEventListener("dragover", e => {
         e.preventDefault();
-        
         const draggingCard = document.querySelector(".dragging");
         if (!draggingCard) return;
 
         const afterElement = getDragAfterElement(container, e.clientY);
-        
         if (afterElement == null) {
             container.appendChild(draggingCard);
         } else {
@@ -713,10 +732,9 @@ document.querySelectorAll(".cards").forEach(container => {
         const newStatus = container.id;
         const targetTask = getTask(draggedTask);
 
-        // 🔒 SLEEP CONTROLE: Een taak mag alléén handmatig naar 'archive' gesleept worden als hij al op 'done' stond.
         if (newStatus === "archive" && targetTask && targetTask.status !== "done" && targetTask.status !== "archive") {
             alert("Je mag een taak pas archiveren als deze besproken is (dus vanuit de 'Done' kolom komt).");
-            loadTasks(); // Reset de visuele weergave naar hoe het in de DB staat
+            loadTasks(); 
             return;
         }
 
@@ -773,9 +791,16 @@ function getDragAfterElement(container, y) {
 }
 
 // =========================
+// COLLAPSIBLE ARCHIVE
+// =========================
+document.getElementById("col-archive").addEventListener("click", function(e) {
+    if (e.target.closest(".card") || e.target.closest(".editBtn")) return;
+    this.classList.toggle("collapsed");
+});
+
+// =========================
 // AUTO REFRESH
 // =========================
-
 setInterval(async () => {
     if (!isModalOpen && !isUpdatingDatabase && !draggedTask) {
         await loadTasks();
