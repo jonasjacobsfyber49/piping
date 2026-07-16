@@ -677,8 +677,6 @@ document.querySelectorAll(".cards").forEach(container => {
 
         const newStatus = container.id;
         const cardElements = [...container.querySelectorAll(".card")];
-        
-        // We maken een array van objecten om in één keer naar Supabase te sturen
         const rowsToUpdate = [];
 
         cardElements.forEach((cardEl, index) => {
@@ -692,8 +690,7 @@ document.querySelectorAll(".cards").forEach(container => {
                 localTask.sort_order = newOrder;
             }
 
-            // 2. Voeg toe aan onze bulk-update lijst
-            // Belangrijk: Supabase heeft de Primary Key ('id') nodig om te weten welke rij hij moet updaten
+            // 2. Voeg toe aan bulk-update lijst
             rowsToUpdate.push({
                 id: cardId,
                 status: newStatus,
@@ -701,13 +698,15 @@ document.querySelectorAll(".cards").forEach(container => {
             });
         });
 
-        // Render direct visueel zodat het soepel oogt
+        // 🔥 DE FIX: Sorteer de lokale taken-lijst direct op de nieuwe sort_order!
+        tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+        // 3. Render direct visueel (nu met de juiste sortering!)
         renderBoard();
 
         console.log("Verzenden van bulk-update naar Supabase...", rowsToUpdate);
 
-        // 3. Stuur ALLES in één enkele query naar de database (.upsert)
-        // De 'upsert' methode update bestaande rijen als de 'id' al bestaat.
+        // 4. Stuur naar de database
         const { data, error } = await supabaseClient
             .from("kanban_tasks")
             .upsert(rowsToUpdate);
@@ -719,13 +718,11 @@ document.querySelectorAll(".cards").forEach(container => {
             console.log("✅ Database succesvol bijgewerkt via bulk upsert!");
         }
 
-        // Geef de database even ademruimte voor de auto-refresh weer start
         setTimeout(() => {
             isUpdatingDatabase = false;
             console.log("=== DROP EVENT AFGEHANDELD (Auto-refresh hervat) ===");
         }, 800);
     });
-});
 
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll(".card:not(.dragging)")];
