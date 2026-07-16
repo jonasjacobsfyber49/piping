@@ -743,22 +743,6 @@ document.addEventListener("keydown", e => {
         closeModal();
     }
 });
-// =========================
-// AUTO REFRESH (Pauzeert als modal open is)
-// =========================
-setInterval(async () => {
-    await loadTasks();
-}, 3000);
-
-// INITIAL LOAD
-loadTasks();
-
-// ESC CLOSE
-document.addEventListener("keydown", e => {
-    if(e.key === "Escape"){
-        closeModal();
-    }
-});
 </script>
 
 </body>
