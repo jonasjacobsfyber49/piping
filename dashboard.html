@@ -61,7 +61,7 @@
         }
         .board{
             display:grid;
-            grid-template-columns:repeat(3,1fr);
+            grid-template-columns:repeat(4,1fr); /* Veranderd naar 4 kolommen */
             gap:18px;
         }
         .column {
@@ -116,6 +116,16 @@
             line-height:1.45;
             font-size:14px;
         }
+        .card-duedate {
+            font-size: 11px;
+            color: #d46c45;
+            background: #fdf2ee;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 8px;
+            font-weight: 500;
+        }
         .card-footer{
             display:flex;
             justify-content:space-between;
@@ -169,9 +179,24 @@
             display:flex;
             gap:15px;
             margin-bottom:15px;
+            flex-wrap: wrap;
         }
-        .row select{
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 140px;
+        }
+        .field-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+        }
+        .field-group select, .field-group input {
             padding:8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
         .modalButtons{
             display:flex;
@@ -190,6 +215,10 @@
         }
         .secondary{
             background:#ddd;
+        }
+        .danger{
+            background:#cc3333;
+            color:white;
         }
         .comments{
             margin-top:25px;
@@ -255,6 +284,14 @@
         </div>
         <div class="cards" id="done"></div>
     </div>
+
+    <div class="column" data-status="archive">
+        <div class="column-header">
+            <span>Archive (Besproken)</span>
+            <span class="count" id="count-archive">0</span>
+        </div>
+        <div class="cards" id="archive"></div>
+    </div>
 </div>
 
 <div class="modalOverlay" id="modal">
@@ -263,20 +300,32 @@
         <textarea id="taskText"></textarea>
 
         <div class="row">
-            <select id="taskOwner">
-                <option value="jonas">Jonas</option>
-                <option value="luis">Luis</option>
-            </select>
+            <div class="field-group">
+                <label for="taskOwner">Owner</label>
+                <select id="taskOwner">
+                    <option value="jonas">Jonas</option>
+                    <option value="luis">Luis</option>
+                </select>
+            </div>
 
-            <select id="taskStatus">
-                <option value="todo">To Do</option>
-                <option value="inprogress">In Progress</option>
-                <option value="done">Done</option>
-            </select>
+            <div class="field-group">
+                <label for="taskStatus">Status</label>
+                <select id="taskStatus">
+                    <option value="todo">To Do</option>
+                    <option value="inprogress">In Progress</option>
+                    <option value="done">Done</option>
+                    <option value="archive" id="statusOptArchive">Archive</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label for="taskDueDate">Due Date</label>
+                <input type="date" id="taskDueDate">
+            </div>
         </div>
 
         <div class="modalButtons">
-            <button class="secondary" id="deleteTaskBtn">Delete</button>
+            <button class="danger" id="deleteTaskBtn" style="margin-right:auto;">Delete</button>
             <button class="secondary" id="cancelBtn">Cancel</button>
             <button class="primary" id="saveTaskBtn">Save</button>
         </div>
@@ -310,38 +359,29 @@ let isModalOpen = false;
 async function loadTasks() {
     if (isModalOpen) return;
 
-    console.log("=== START LOAD TASKS ===");
     const { data, error } = await supabaseClient
         .from("kanban_tasks")
         .select("*")
         .order("sort_order", { ascending: true });
 
-    if (error) {
-        console.error("Fout bij het ophalen van taken:", error);
-        return;
-    }
+    if (error) return;
 
-    console.log("Opgehaalde taken uit database:", data);
     tasks = data || [];
-    
     await loadComments();
     renderBoard();
 }
 
 async function loadComments() {
-    console.log("=== START LOAD COMMENTS ===");
     const { data, error } = await supabaseClient
         .from("kanban_comments")
         .select("*")
         .order("created_at");
 
     if (error) {
-        console.error("Fout bij het ophalen van comments (Bestaat de tabel kanban_comments wel?):", error);
         comments = [];
         return;
     }
 
-    console.log("Opgehaalde comments:", data);
     comments = data || [];
     tasks.forEach(task => {
         task.comments = comments.filter(c => String(c.task_id) === String(task.id));
@@ -354,7 +394,6 @@ async function createTask(task) {
         .insert(task);
 
     if (error) {
-        console.error(error);
         alert(error.message);
         return;
     }
@@ -368,7 +407,6 @@ async function updateTask(id, values) {
         .eq("id", id);
 
     if (error) {
-        console.error(error);
         alert(error.message);
         return;
     }
@@ -382,7 +420,6 @@ async function removeTask(id) {
         .eq("id", id);
 
     if (error) {
-        console.error(error);
         alert(error.message);
         return;
     }
@@ -399,25 +436,10 @@ async function addComment(taskId, text) {
         });
 
     if (error) {
-        console.error(error);
         alert(error.message);
         return;
     }
     await loadTasks();
-}
-
-async function saveSortOrder(taskId, status, sortOrder) {
-    const { error } = await supabaseClient
-        .from("kanban_tasks")
-        .update({
-            status: status,
-            sort_order: sortOrder
-        })
-        .eq("id", taskId);
-
-    if (error) {
-        console.error(error);
-    }
 }
 
 function getTask(id) {
@@ -432,23 +454,18 @@ function renderBoard() {
     renderColumn("todo");
     renderColumn("inprogress");
     renderColumn("done");
+    renderColumn("archive"); // Render de nieuwe kolom
 }
 
 function renderColumn(status) {
-    console.log(`=== RENDERING COLUMN: ${status} ===`);
     const container = document.getElementById(status);
-    if (!container) {
-        console.error(`HTML container met id '${status}' niet gevonden!`);
-        return;
-    }
+    if (!container) return;
     container.innerHTML = "";
 
     let filteredTasks = tasks.filter(t => t.status === status);
-    console.log(`Taken met status '${status}' vóór filter:`, filteredTasks);
 
     if(currentFilter !== "all"){
         filteredTasks = filteredTasks.filter(t => t.owner === currentFilter);
-        console.log(`Taken na filteren op eigenaar '${currentFilter}':`, filteredTasks);
     }
 
     document.getElementById(`count-${status}`).textContent = filteredTasks.length;
@@ -460,9 +477,17 @@ function renderColumn(status) {
         card.dataset.id = task.id;
 
         const commentCount = task.comments ? task.comments.length : 0;
+        
+        // Formatteer de datum alleen als deze bestaat
+        let dueDateHtml = "";
+        if (task.due_date) {
+            const dateObj = new Date(task.due_date);
+            dueDateHtml = `<div class="card-duedate">📅 ${dateObj.toLocaleDateString('nl-NL', {day: 'numeric', month: 'short'})}</div>`;
+        }
 
         card.innerHTML = `
             <div class="card-text">${escapeHtml(task.text)}</div>
+            ${dueDateHtml}
             <div class="card-footer">
                 <div class="owner">${task.owner}</div>
                 <div class="actions">
@@ -515,9 +540,18 @@ function openTask(id){
     isModalOpen = true;
     document.getElementById("modal").classList.add("show");
     document.getElementById("deleteTaskBtn").style.display = "block"; 
-    document.getElementById("taskText").value = editingTask.text;
-    document.getElementById("taskOwner").value = editingTask.owner;
-    document.getElementById("taskStatus").value = editingTask.status;
+    document.getElementById("taskText").value = editingTask.text || "";
+    document.getElementById("taskOwner").value = editingTask.owner || "jonas";
+    document.getElementById("taskStatus").value = editingTask.status || "todo";
+    document.getElementById("taskDueDate").value = editingTask.due_date || "";
+
+    // 🔒 EIS CONTROLE: Je mag een taak alleen naar Archive zetten als de status AL 'done' of 'archive' is.
+    const archiveOption = document.getElementById("statusOptArchive");
+    if (editingTask.status === "done" || editingTask.status === "archive") {
+        archiveOption.disabled = false;
+    } else {
+        archiveOption.disabled = true;
+    }
 
     renderComments();
 }
@@ -577,16 +611,18 @@ document.getElementById("saveTaskBtn").onclick = async () => {
 
     const owner = document.getElementById("taskOwner").value;
     const status = document.getElementById("taskStatus").value;
+    const dueDate = document.getElementById("taskDueDate").value || null; // Sla null op als leeg gelaten
 
     if(editingTask){
-        await updateTask(editingTask.id, { text, owner, status });
+        await updateTask(editingTask.id, { text, owner, status, due_date: dueDate });
     } else {
         const maxOrder = tasks.length ? Math.max(...tasks.map(t => t.sort_order || 0)) : 0;
         await createTask({
             text,
             owner,
             status,
-            sort_order: maxOrder + 1
+            sort_order: maxOrder + 1,
+            due_date: dueDate
         });
     }
 
@@ -633,11 +669,13 @@ document.getElementById("addTask").onclick = () => {
     document.getElementById("taskText").value = "";
     document.getElementById("taskOwner").value = "jonas";
     document.getElementById("taskStatus").value = "todo";
+    document.getElementById("taskDueDate").value = "";
+    document.getElementById("statusOptArchive").disabled = true; // Nieuwe taak kan niet direct gearchiveerd worden
     document.getElementById("commentsContainer").innerHTML = "";
 };
 
 // =========================
-// DRAG & DROP (VOLLEDIG GEFIXT & AFGESLOTEN)
+// DRAG & DROP
 // =========================
 
 let isUpdatingDatabase = false;
@@ -672,10 +710,17 @@ document.querySelectorAll(".cards").forEach(container => {
         e.preventDefault();
         if(!draggedTask) return;
 
-        console.log("=== DROP EVENT GESTART ===");
-        isUpdatingDatabase = true;
-
         const newStatus = container.id;
+        const targetTask = getTask(draggedTask);
+
+        // 🔒 SLEEP CONTROLE: Een taak mag alléén handmatig naar 'archive' gesleept worden als hij al op 'done' stond.
+        if (newStatus === "archive" && targetTask && targetTask.status !== "done" && targetTask.status !== "archive") {
+            alert("Je mag een taak pas archiveren als deze besproken is (dus vanuit de 'Done' kolom komt).");
+            loadTasks(); // Reset de visuele weergave naar hoe het in de DB staat
+            return;
+        }
+
+        isUpdatingDatabase = true;
         const cardElements = [...container.querySelectorAll(".card")];
         const rowsToUpdate = [];
 
@@ -699,22 +744,16 @@ document.querySelectorAll(".cards").forEach(container => {
         tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
         renderBoard();
 
-        console.log("Verzenden van bulk-update naar Supabase...", rowsToUpdate);
-
-        const { data, error } = await supabaseClient
+        const { error } = await supabaseClient
             .from("kanban_tasks")
             .upsert(rowsToUpdate);
 
         if (error) {
-            console.error("❌ FOUT TIJDENS SORT_ORDER UPDATE:", error);
             alert("Database update mislukt: " + error.message);
-        } else {
-            console.log("✅ Database succesvol bijgewerkt via bulk upsert!");
         }
 
         setTimeout(() => {
             isUpdatingDatabase = false;
-            console.log("=== DROP EVENT AFGEHANDELD (Auto-refresh hervat) ===");
         }, 800);
     });
 });
