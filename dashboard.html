@@ -59,10 +59,10 @@
             cursor:pointer;
             font-weight:600;
         }
-        .board{
-            display:grid;
-            grid-template-columns:repeat(4,1fr);
-            gap:18px;
+       .board{
+            display: flex; /* Gewijzigd van grid naar flex */
+            gap: 18px;
+            width: 100%;
         }
         .column {
             background: #ece9df;
@@ -71,6 +71,8 @@
             min-height: 600px;
             display: flex;
             flex-direction: column;
+            flex: 1; /* Zorgt dat actieve kolommen alle ruimte opeisen */
+            min-width: 0;
         }
         .column-header{
             display:flex;
@@ -151,10 +153,11 @@
         
         /* KLAPBAAR ARCHIVE CSS */
         .column[data-status="archive"] {
-            transition: width 0.3s ease, min-width 0.3s ease;
+            transition: width 0.3s ease, min-width 0.3s ease, flex 0.3s ease;
             cursor: pointer;
         }
         .column.collapsed {
+            flex: 0 0 50px !important; /* Forceert de balk om exact 50px te blijven */
             min-width: 50px !important;
             width: 50px !important;
             padding: 12px 5px;
