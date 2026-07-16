@@ -637,8 +637,10 @@ document.getElementById("addTask").onclick = () => {
 };
 
 // =========================
-// DRAG & DROP (GEOPTIMALISEERD)
+// DRAG & DROP (VEILIG VOOR REFRESH)
 // =========================
+
+let isUpdatingDatabase = false; // Nieuwe vlag om de auto-refresh te pauzeren
 
 function handleDragStart(e){
     draggedTask = e.target.dataset.id;
@@ -654,9 +656,10 @@ document.querySelectorAll(".cards").forEach(container => {
     container.addEventListener("dragover", e => {
         e.preventDefault();
         
-        // Bepaal waar de kaart visueel moet landen op basis van de muispositie
-        const afterElement = getDragAfterElement(container, e.clientY);
         const draggingCard = document.querySelector(".dragging");
+        if (!draggingCard) return;
+
+        const afterElement = getDragAfterElement(container, e.clientY);
         
         if (afterElement == null) {
             container.appendChild(draggingCard);
@@ -669,33 +672,43 @@ document.querySelectorAll(".cards").forEach(container => {
         e.preventDefault();
         if(!draggedTask) return;
 
+        // Blokkeer de auto-refresh direct bij het droppen
+        isUpdatingDatabase = true;
+
         const newStatus = container.id;
-        
-        // Haal alle kaarten op in de huidige kolom (inclusief de net gedropte kaart)
         const cardElements = [...container.querySelectorAll(".card")];
         
-        // Loop door de kaarten heen en update hun sort_order op basis van de nieuwe visuele positie
+        // We verzamelen alle updates in een lijst van Promises zodat we ze sneller kunnen verwerken
+        const updates = [];
+
         for (let i = 0; i < cardElements.length; i++) {
             const cardId = cardElements[i].dataset.id;
             const newOrder = i + 1;
 
-            // Update lokaal in het scriptgeheugen zodat de UI niet verspringt
+            // Update direct lokaal in het scriptgeheugen
             const localTask = tasks.find(t => String(t.id) === String(cardId));
             if (localTask) {
                 localTask.status = newStatus;
                 localTask.sort_order = newOrder;
             }
 
-            // Stuur de nieuwe status en volgorde naar Supabase
-            await saveSortOrder(cardId, newStatus, newOrder);
+            // Voeg de database-update toe aan de wachtrij
+            updates.push(saveSortOrder(cardId, newStatus, newOrder));
         }
 
-        // Render de borden opnieuw om de counts en data synchroon te houden
+        // Render direct de nieuwe situatie visueel
         renderBoard();
+
+        // Wacht tot álle database updates naar Supabase zijn verzonden
+        await Promise.all(updates);
+
+        // Geef Supabase een fractie van een seconde extra ademruimte en zet de refresh weer aan
+        setTimeout(() => {
+            isUpdatingDatabase = false;
+        }, 500);
     });
 });
 
-// Helper functie om te berekenen tussen welke kaarten je de muis houdt
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll(".card:not(.dragging)")];
 
@@ -710,6 +723,26 @@ function getDragAfterElement(container, y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
+// =========================
+// AUTO REFRESH (AANGEPAST)
+// =========================
+
+setInterval(async () => {
+    // Ververs ALLEEN als de modal gesloten is EN we niet midden in een drag/drop database-update zitten
+    if (!isModalOpen && !isUpdatingDatabase && !draggedTask) {
+        await loadTasks();
+    }
+}, 3000);
+
+// INITIAL LOAD
+loadTasks();
+
+// ESC CLOSE
+document.addEventListener("keydown", e => {
+    if(e.key === "Escape"){
+        closeModal();
+    }
+});
 // =========================
 // AUTO REFRESH (Pauzeert als modal open is)
 // =========================
