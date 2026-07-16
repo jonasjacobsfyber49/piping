@@ -304,38 +304,44 @@ let draggedTask = null;
 let isModalOpen = false; // Voorkomt dat auto-refresh je modal leeggooit tijdens het typen
 
 async function loadTasks() {
-    // Als de gebruiker bezig is in de modal, vernieuwen we even niet op de achtergrond
     if (isModalOpen) return;
 
+    console.log("=== START LOAD TASKS ===");
     const { data, error } = await supabaseClient
         .from("kanban_tasks")
         .select("*")
         .order("sort_order", { ascending: true });
 
     if (error) {
-        console.error(error);
+        console.error("Fout bij het ophalen van taken:", error);
         return;
     }
 
+    console.log("Opgehaalde taken uit database:", data);
     tasks = data || [];
+    
     await loadComments();
     renderBoard();
 }
 
 async function loadComments() {
+    console.log("=== START LOAD COMMENTS ===");
     const { data, error } = await supabaseClient
         .from("kanban_comments")
         .select("*")
         .order("created_at");
 
     if (error) {
-        console.error(error);
+        console.error("Fout bij het ophalen van comments (Bestaat de tabel kanban_comments wel?):", error);
+        // We gooien de fout niet plat, zodat de taken alsnog kunnen renderen zonder comments
+        comments = [];
         return;
     }
 
+    console.log("Opgehaalde comments:", data);
     comments = data || [];
     tasks.forEach(task => {
-        task.comments = comments.filter(c => c.task_id === task.id);
+        task.comments = comments.filter(c => String(c.task_id) === String(task.id));
     });
 }
 
@@ -427,13 +433,20 @@ function renderBoard() {
 }
 
 function renderColumn(status) {
+    console.log(`=== RENDERING COLUMN: ${status} ===`);
     const container = document.getElementById(status);
+    if (!container) {
+        console.error(`HTML container met id '${status}' niet gevonden!`);
+        return;
+    }
     container.innerHTML = "";
 
     let filteredTasks = tasks.filter(t => t.status === status);
+    console.log(`Taken met status '${status}' vóór filter:`, filteredTasks);
 
     if(currentFilter !== "all"){
         filteredTasks = filteredTasks.filter(t => t.owner === currentFilter);
+        console.log(`Taken na filteren op eigenaar '${currentFilter}':`, filteredTasks);
     }
 
     document.getElementById(`count-${status}`).textContent = filteredTasks.length;
@@ -464,7 +477,6 @@ function renderColumn(status) {
 
     attachEditButtons();
 }
-
 function attachEditButtons(){
     document.querySelectorAll(".editBtn").forEach(btn => {
         btn.onclick = () => {
