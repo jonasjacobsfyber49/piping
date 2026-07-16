@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: #f7f6f3;
+    color: #2b2a27;
+    padding: 20px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: #78766f; font-size: 13px; margin-bottom: 16px; }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-btn {
+    border: 1px solid #d8d5cd;
+    background: #fff;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    color: #4a4842;
+  }
+  .filter-btn.active {
+    background: #2b2a27;
+    color: #fff;
+    border-color: #2b2a27;
+  }
+  .add-btn {
+    margin-left: auto;
+    border: none;
+    background: #c15f3c;
+    color: #fff;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .add-btn:hover { background: #a94f2f; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .column {
+    background: #eeece5;
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 200px;
+  }
+  .column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 6px 10px;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #6b6960;
+  }
+  .count {
+    background: #dedad0;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    border-left: 4px solid #c9c5ba;
+    cursor: grab;
+  }
+  .card.owner-luis { border-left-color: #3c7dc1; }
+  .card.owner-jonas { border-left-color: #c15f3c; }
+  .card.dragging { opacity: 0.4; }
+  .card-text {
+    font-size: 13.5px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+  }
+  .owner-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.3px;
+  }
+  .owner-tag.luis { background: #e4eefb; color: #2864a3; }
+  .owner-tag.jonas { background: #fbe9e2; color: #a94f2f; }
+  .card-actions { display: flex; gap: 6px; align-items: center; }
+  .card-actions button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: #a09e96;
+    padding: 2px 4px;
+  }
+  .card-actions button:hover { color: #2b2a27; }
+  .comment-badge {
+    font-size: 11px;
+    color: #8a8779;
+  }
+
+  .drop-zone-empty {
+    font-size: 12px;
+    color: #a8a59c;
+    text-align: center;
+    padding: 14px 4px;
+    border: 1.5px dashed #d8d5cd;
+    border-radius: 8px;
+  }
+  .card-placeholder {
+    height: 46px;
+    border: 1.5px dashed #c9a68e;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: #fbeee5;
+  }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px;
+    width: 460px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 10px; font-size: 15px; }
+  .modal h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #6b6960;
+  }
+  .modal textarea {
+    width: 100%;
+    min-height: 80px;
+    border: 1px solid #d8d5cd;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+  }
+  .modal-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .modal select {
+    border: 1px solid #d8d5cd;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .btn {
+    border: none;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-secondary { background: #eeece5; color: #4a4842; }
+  .btn-primary { background: #2b2a27; color: #fff; }
+
+  .comments-section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #eeece5;
+  }
+  .comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+  }
+  .comment-empty {
+    font-size: 12px;
+    color: #a8a59c;
+  }
+  .comment-item {
+    background: #f7f6f3;
+    border-radius: 8px;
+    padding: 7px 10px;
+  }
+  .comment-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #8a8779;
+    margin-bottom: 3px;
+  }
+  .comment-meta .comment-author { font-weight: 700; color: #4a4842; }
+  .comment-text { font-size: 13px; white-space: pre-wrap; line-height: 1.4; }
+  .comment-input-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .comment-input-row textarea {
+    min-height: 50px;
+  }
+  .comment-input-row .btn { align-self: flex-end; }
+</style>
+</head>
+<body>
+
+<h1>Piping Platform — To-Do (Jonas &amp; Luis)</h1>
+<div class="subtitle">Shared kanban. Drag cards to reorder by priority or move between columns. Click a card to edit or comment. Data is saved locally in this artifact.</div>
+
+<div class="toolbar">
+  <button class="filter-btn active" data-owner="all">All</button>
+  <button class="filter-btn" data-owner="luis">Luis</button>
+  <button class="filter-btn" data-owner="jonas">Jonas</button>
+  <button class="add-btn" id="addBtn">+ Add task</button>
+</div>
+
+<div class="board" id="board">
+  <div class="column" data-status="todo">
+    <div class="column-header"><span>To do</span><span class="count" id="count-todo">0</span></div>
+    <div class="cards" id="cards-todo"></div>
+  </div>
+  <div class="column" data-status="inprogress">
+    <div class="column-header"><span>In progress</span><span class="count" id="count-inprogress">0</span></div>
+    <div class="cards" id="cards-inprogress"></div>
+  </div>
+  <div class="column" data-status="done">
+    <div class="column-header"><span>Done</span><span class="count" id="count-done">0</span></div>
+    <div class="cards" id="cards-done"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Edit task</h3>
+    <textarea id="modalText"></textarea>
+    <div class="modal-row">
+      <label style="font-size:13px;color:#6b6960;">Owner:</label>
+      <select id="modalOwner">
+        <option value="luis">Luis</option>
+        <option value="jonas">Jonas</option>
+      </select>
+      <label style="font-size:13px;color:#6b6960;margin-left:10px;">Status:</label>
+      <select id="modalStatus">
+        <option value="todo">To do</option>
+        <option value="inprogress">In progress</option>
+        <option value="done">Done</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="deleteBtn">Delete</button>
+      <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveBtn">Save</button>
+    </div>
+
+    <div class="comments-section" id="commentsSection">
+      <h4>Updates / comments</h4>
+      <div class="comments-list" id="commentsList"></div>
+      <div class="comment-input-row">
+        <textarea id="commentText" placeholder="Post an update on this task..."></textarea>
+        <button class="btn btn-primary" id="postCommentBtn">Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'piping-todo-kanban-v1';
+
+const defaultTasks = [
+  // --- Luis ---
+  { owner:'luis', status:'todo', text:'Double-check the ISO naming convention: line number followed by "-SH1", "-SH2" etc. for subsequent pages.' },
+  { owner:'luis', status:'todo', text:'How are spool names determined? Always "A/..." per ISO, or does the lettering continue across the whole line?' },
+  { owner:'luis', status:'todo', text:'How are spools split? Assumed it\'s at a field weld, but are there other criteria too (e.g. length limits)?' },
+  { owner:'luis', status:'todo', text:'Investigate Admin2Win — structure for piping: are things like articles / invoicing / etc. used? Needed for later integration with the BOM import from the ISO.' },
+  { owner:'luis', status:'todo', text:'Investigate Admin2Win — draw out the process flow.' },
+  { owner:'luis', status:'todo', text:'Investigate Admin2Win — which projects are relevant for piping construction? Which filters apply?' },
+  { owner:'luis', status:'todo', text:'Draw out the general process flow: which steps must the process account for, which views are needed (e.g. a list of all spools fully ready for painting?), and what needs to be logged at each step.' },
+  { owner:'luis', status:'todo', text:'Better understand the work steps/conditions on the floor to shape the hardware solution — is a large screen with keyboard practical, or a small tablet / QR codes stuck on the welds?' },
+  { owner:'luis', status:'todo', text:'Which welding equipment do we use today? Can we measure/couple data from it (e.g. current)? Easiest via a clamp on the cable, but reading it directly from the equipment would be better. Next level: setting weld parameters on the equipment itself.' },
+  { owner:'luis', status:'todo', text:'For a project, which other documents are important besides the weld log? Could be managed on the platform and synced to SharePoint (or vice versa).' },
+  { owner:'luis', status:'todo', text:'Is the weld type itself important, or is it always determined by the A/B weld type?' },
+  { owner:'luis', status:'todo', text:'At which level can material spec and thickness (sch.) be set? Idea: set at project level, with override possible at ISO level, and deeper still at A/B level.' },
+  // --- Jonas ---
+  { owner:'jonas', status:'todo', text:'Polaris: support both flows — (1) mark all welds first then enter info, and (2) mark a weld and enter its info immediately.' },
+  { owner:'jonas', status:'todo', text:'Polaris: improve weld configuration.' },
+  { owner:'jonas', status:'todo', text:'Polaris: add weld info as a table for easy data entry, incl. copy/paste.' },
+  { owner:'jonas', status:'todo', text:'Polaris: add an annotation toolbar for adding other text/markup elements.' },
+  { owner:'jonas', status:'todo', text:'Polaris: provide Excel/PDF export for backwards compatibility (save/use as Excel/ISO).' },
+  { owner:'jonas', status:'todo', text:'Polaris: explore AI/OCR scanning.' },
+  { owner:'jonas', status:'todo', text:'Future idea: simple Next.js app on Vercel for tracking to-dos together with Luis (maybe a lightweight kanban, possibly public access).' },
+];
+
+function load() {
+  let loaded;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) loaded = JSON.parse(raw);
+  } catch(e) {}
+  if (!loaded) {
+    loaded = defaultTasks.map((t,i) => ({ id: 'seed-'+i, order: i, comments: [], ...t }));
+  }
+  // migrate: ensure every task has an order value and a comments array
+  let needsMigration = false;
+  loaded.forEach((t, i) => {
+    if (typeof t.order !== 'number') { t.order = i; needsMigration = true; }
+    if (!Array.isArray(t.comments)) { t.comments = []; needsMigration = true; }
+  });
+  if (needsMigration) save(loaded);
+  return loaded;
+}
+function save(tasks) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+let tasks = load();
+let currentFilter = 'all';
+let editingId = null;
+let draggedId = null;
+
+function getSorted() {
+  return [...tasks].sort((a,b) => a.order - b.order);
+}
+
+function render() {
+  const sorted = getSorted();
+  ['todo','inprogress','done'].forEach(status => {
+    const container = document.getElementById('cards-'+status);
+    container.innerHTML = '';
+    const filtered = sorted.filter(t => t.status === status && (currentFilter === 'all' || t.owner === currentFilter));
+    document.getElementById('count-'+status).textContent = filtered.length;
+    if (filtered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'drop-zone-empty';
+      empty.textContent = 'No tasks';
+      container.appendChild(empty);
+    }
+    filtered.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'card owner-' + t.owner;
+      card.draggable = true;
+      card.dataset.id = t.id;
+      const commentCount = (t.comments || []).length;
+      card.innerHTML = `
+        <div class="card-text"></div>
+        <div class="card-footer">
+          <span class="owner-tag ${t.owner}">${t.owner}</span>
+          <div class="card-actions">
+            ${commentCount ? `<span class="comment-badge">💬 ${commentCount}</span>` : ''}
+            <button class="edit-btn" title="Edit">✎</button>
+          </div>
+        </div>`;
+      card.querySelector('.card-text').textContent = t.text;
+      card.addEventListener('dragstart', () => { draggedId = t.id; setTimeout(()=>card.classList.add('dragging'),0); });
+      card.addEventListener('dragend', () => { card.classList.remove('dragging'); draggedId = null; });
+      card.querySelector('.edit-btn').addEventListener('click', () => openModal(t.id));
+      container.appendChild(card);
+    });
+  });
+}
+
+function getDragAfterElement(container, y) {
+  const cards = [...container.querySelectorAll('.card:not(.dragging)')];
+  return cards.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+document.querySelectorAll('.column').forEach(col => {
+  const container = col.querySelector('.cards');
+
+  col.addEventListener('dragover', e => {
+    e.preventDefault();
+    const dragging = document.querySelector('.card.dragging');
+    if (!dragging) return;
+    const afterElement = getDragAfterElement(container, e.clientY);
+    if (afterElement == null) {
+      container.appendChild(dragging);
+    } else {
+      container.insertBefore(dragging, afterElement);
+    }
+  });
+
+  col.addEventListener('drop', e => {
+    e.preventDefault();
+    if (!draggedId) return;
+    const status = col.dataset.status;
+    const t = tasks.find(x => x.id === draggedId);
+    if (!t) return;
+
+    // Determine new order based on the dragged card's current DOM neighbors.
+    const cardEls = [...container.querySelectorAll('.card')];
+    const idx = cardEls.findIndex(el => el.dataset.id === draggedId);
+    const prevEl = idx > 0 ? cardEls[idx - 1] : null;
+    const nextEl = idx >= 0 && idx < cardEls.length - 1 ? cardEls[idx + 1] : null;
+    const prevOrder = prevEl ? tasks.find(x => x.id === prevEl.dataset.id)?.order : null;
+    const nextOrder = nextEl ? tasks.find(x => x.id === nextEl.dataset.id)?.order : null;
+
+    let newOrder;
+    if (prevOrder != null && nextOrder != null) newOrder = (prevOrder + nextOrder) / 2;
+    else if (prevOrder != null) newOrder = prevOrder + 1;
+    else if (nextOrder != null) newOrder = nextOrder - 1;
+    else newOrder = 0;
+
+    t.status = status;
+    t.order = newOrder;
+    save(tasks);
+    render();
+  });
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.owner;
+    render();
+  });
+});
+
+function renderComments(t) {
+  const list = document.getElementById('commentsList');
+  list.innerHTML = '';
+  const comments = t.comments || [];
+  if (comments.length === 0) {
+    list.innerHTML = '<div class="comment-empty">No updates yet.</div>';
+    return;
+  }
+  comments.slice().sort((a,b) => a.ts - b.ts).forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    const date = new Date(c.ts);
+    const dateStr = date.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' + date.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    item.innerHTML = `
+      <div class="comment-meta"><span></span></div>
+      <div class="comment-text"></div>`;
+    item.querySelector('.comment-meta span').textContent = dateStr;
+    item.querySelector('.comment-text').textContent = c.text;
+    list.appendChild(item);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+
+function openModal(id) {
+  editingId = id;
+  const overlay = document.getElementById('modalOverlay');
+  const isNew = id === null;
+  document.getElementById('modalTitle').textContent = isNew ? 'New task' : 'Edit task';
+  const t = isNew ? { text:'', owner:'luis', status:'todo', comments:[] } : tasks.find(x => x.id === id);
+  document.getElementById('modalText').value = t.text;
+  document.getElementById('modalOwner').value = t.owner;
+  document.getElementById('modalStatus').value = t.status;
+  document.getElementById('deleteBtn').style.display = isNew ? 'none' : 'inline-block';
+  document.getElementById('commentsSection').style.display = isNew ? 'none' : 'block';
+  document.getElementById('commentText').value = '';
+  if (!isNew) renderComments(t);
+  overlay.classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editingId = null;
+}
+
+document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const text = document.getElementById('modalText').value.trim();
+  const owner = document.getElementById('modalOwner').value;
+  const status = document.getElementById('modalStatus').value;
+  if (!text) return;
+  if (editingId === null) {
+    const maxOrder = tasks.filter(t => t.status === status).reduce((m,t) => Math.max(m, t.order), -1);
+    tasks.push({ id: 'task-' + Date.now(), text, owner, status, order: maxOrder + 1, comments: [] });
+  } else {
+    const t = tasks.find(x => x.id === editingId);
+    t.text = text; t.owner = owner; t.status = status;
+  }
+  save(tasks);
+  closeModal();
+  render();
+});
+document.getElementById('deleteBtn').addEventListener('click', () => {
+  if (editingId === null) return;
+  tasks = tasks.filter(x => x.id !== editingId);
+  save(tasks);
+  closeModal();
+  render();
+});
+document.getElementById('postCommentBtn').addEventListener('click', () => {
+  if (editingId === null) return;
+  const text = document.getElementById('commentText').value.trim();
+  if (!text) return;
+  const t = tasks.find(x => x.id === editingId);
+  t.comments = t.comments || [];
+  t.comments.push({ text, ts: Date.now() });
+  save(tasks);
+  document.getElementById('commentText').value = '';
+  renderComments(t);
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
