@@ -637,10 +637,10 @@ document.getElementById("addTask").onclick = () => {
 };
 
 // =========================
-// DRAG & DROP (VEILIG VOOR REFRESH)
+// DRAG & DROP (ROBUUST MET BULK UPDATE & LOGS)
 // =========================
 
-let isUpdatingDatabase = false; // Nieuwe vlag om de auto-refresh te pauzeren
+let isUpdatingDatabase = false;
 
 function handleDragStart(e){
     draggedTask = e.target.dataset.id;
@@ -672,40 +672,58 @@ document.querySelectorAll(".cards").forEach(container => {
         e.preventDefault();
         if(!draggedTask) return;
 
-        // Blokkeer de auto-refresh direct bij het droppen
+        console.log("=== DROP EVENT GESTART ===");
         isUpdatingDatabase = true;
 
         const newStatus = container.id;
         const cardElements = [...container.querySelectorAll(".card")];
         
-        // We verzamelen alle updates in een lijst van Promises zodat we ze sneller kunnen verwerken
-        const updates = [];
+        // We maken een array van objecten om in één keer naar Supabase te sturen
+        const rowsToUpdate = [];
 
-        for (let i = 0; i < cardElements.length; i++) {
-            const cardId = cardElements[i].dataset.id;
-            const newOrder = i + 1;
+        cardElements.forEach((cardEl, index) => {
+            const cardId = cardEl.dataset.id;
+            const newOrder = index + 1;
 
-            // Update direct lokaal in het scriptgeheugen
+            // 1. Update direct lokaal in de javascript 'tasks' array
             const localTask = tasks.find(t => String(t.id) === String(cardId));
             if (localTask) {
                 localTask.status = newStatus;
                 localTask.sort_order = newOrder;
             }
 
-            // Voeg de database-update toe aan de wachtrij
-            updates.push(saveSortOrder(cardId, newStatus, newOrder));
-        }
+            // 2. Voeg toe aan onze bulk-update lijst
+            // Belangrijk: Supabase heeft de Primary Key ('id') nodig om te weten welke rij hij moet updaten
+            rowsToUpdate.push({
+                id: cardId,
+                status: newStatus,
+                sort_order: newOrder
+            });
+        });
 
-        // Render direct de nieuwe situatie visueel
+        // Render direct visueel zodat het soepel oogt
         renderBoard();
 
-        // Wacht tot álle database updates naar Supabase zijn verzonden
-        await Promise.all(updates);
+        console.log("Verzenden van bulk-update naar Supabase...", rowsToUpdate);
 
-        // Geef Supabase een fractie van een seconde extra ademruimte en zet de refresh weer aan
+        // 3. Stuur ALLES in één enkele query naar de database (.upsert)
+        // De 'upsert' methode update bestaande rijen als de 'id' al bestaat.
+        const { data, error } = await supabaseClient
+            .from("kanban_tasks")
+            .upsert(rowsToUpdate);
+
+        if (error) {
+            console.error("❌ FOUT TIJDENS SORT_ORDER UPDATE:", error);
+            alert("Database update mislukt: " + error.message);
+        } else {
+            console.log("✅ Database succesvol bijgewerkt via bulk upsert!");
+        }
+
+        // Geef de database even ademruimte voor de auto-refresh weer start
         setTimeout(() => {
             isUpdatingDatabase = false;
-        }, 500);
+            console.log("=== DROP EVENT AFGEHANDELD (Auto-refresh hervat) ===");
+        }, 800);
     });
 });
 
@@ -724,11 +742,10 @@ function getDragAfterElement(container, y) {
 }
 
 // =========================
-// AUTO REFRESH (AANGEPAST)
+// AUTO REFRESH
 // =========================
 
 setInterval(async () => {
-    // Ververs ALLEEN als de modal gesloten is EN we niet midden in een drag/drop database-update zitten
     if (!isModalOpen && !isUpdatingDatabase && !draggedTask) {
         await loadTasks();
     }
