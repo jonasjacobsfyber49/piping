@@ -637,8 +637,9 @@ document.getElementById("addTask").onclick = () => {
 };
 
 // =========================
-// DRAG & DROP (GEFIXT VOOR DIRECTE UI-UPDATE)
+// DRAG & DROP (GEOPTIMALISEERD)
 // =========================
+
 function handleDragStart(e){
     draggedTask = e.target.dataset.id;
     e.target.classList.add("dragging");
@@ -652,31 +653,62 @@ function handleDragEnd(e){
 document.querySelectorAll(".cards").forEach(container => {
     container.addEventListener("dragover", e => {
         e.preventDefault();
+        
+        // Bepaal waar de kaart visueel moet landen op basis van de muispositie
+        const afterElement = getDragAfterElement(container, e.clientY);
+        const draggingCard = document.querySelector(".dragging");
+        
+        if (afterElement == null) {
+            container.appendChild(draggingCard);
+        } else {
+            container.insertBefore(draggingCard, afterElement);
+        }
     });
 
     container.addEventListener("drop", async e => {
         e.preventDefault();
         if(!draggedTask) return;
 
-        const cardData = getTask(draggedTask);
-        if(!cardData) return;
-
         const newStatus = container.id;
         
-        // Update direct lokaal in het script geheugen voor een vloeiende ervaring
-        cardData.status = newStatus;
+        // Haal alle kaarten op in de huidige kolom (inclusief de net gedropte kaart)
+        const cardElements = [...container.querySelectorAll(".card")];
         
-        const cards = [...container.querySelectorAll(".card")];
-        let sortOrder = cards.length ? cards.length + 1 : 1;
-        cardData.sort_order = sortOrder;
+        // Loop door de kaarten heen en update hun sort_order op basis van de nieuwe visuele positie
+        for (let i = 0; i < cardElements.length; i++) {
+            const cardId = cardElements[i].dataset.id;
+            const newOrder = i + 1;
 
-        // Render direct de nieuwe situatie op het scherm
+            // Update lokaal in het scriptgeheugen zodat de UI niet verspringt
+            const localTask = tasks.find(t => String(t.id) === String(cardId));
+            if (localTask) {
+                localTask.status = newStatus;
+                localTask.sort_order = newOrder;
+            }
+
+            // Stuur de nieuwe status en volgorde naar Supabase
+            await saveSortOrder(cardId, newStatus, newOrder);
+        }
+
+        // Render de borden opnieuw om de counts en data synchroon te houden
         renderBoard();
-
-        // Stuur daarna stilletjes naar Supabase op de achtergrond
-        await saveSortOrder(cardData.id, newStatus, sortOrder);
     });
 });
+
+// Helper functie om te berekenen tussen welke kaarten je de muis houdt
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll(".card:not(.dragging)")];
+
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
 
 // =========================
 // AUTO REFRESH (Pauzeert als modal open is)
