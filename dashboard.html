@@ -64,11 +64,13 @@
             grid-template-columns:repeat(3,1fr);
             gap:18px;
         }
-        .column{
-            background:#ece9df;
-            border-radius:10px;
-            padding:12px;
-            min-height:500px;
+        .column {
+            background: #ece9df;
+            border-radius: 10px;
+            padding: 12px;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
         }
         .column-header{
             display:flex;
@@ -86,8 +88,10 @@
             border-radius:20px;
             font-size:11px;
         }
-        .cards{
-            min-height:350px;
+        .cards {
+            flex-grow: 1;
+            min-height: 100%;
+            padding-bottom: 50px;
         }
         .card{
             background:white;
@@ -301,7 +305,7 @@ let comments = [];
 let currentFilter = "all";
 let editingTask = null;
 let draggedTask = null;
-let isModalOpen = false; // Voorkomt dat auto-refresh je modal leeggooit tijdens het typen
+let isModalOpen = false; 
 
 async function loadTasks() {
     if (isModalOpen) return;
@@ -333,7 +337,6 @@ async function loadComments() {
 
     if (error) {
         console.error("Fout bij het ophalen van comments (Bestaat de tabel kanban_comments wel?):", error);
-        // We gooien de fout niet plat, zodat de taken alsnog kunnen renderen zonder comments
         comments = [];
         return;
     }
@@ -418,7 +421,6 @@ async function saveSortOrder(taskId, status, sortOrder) {
 }
 
 function getTask(id) {
-    // Zorg voor een juiste type vergelijking (id kan string of int zijn afhankelijk van Supabase setup)
     return tasks.find(t => String(t.id) === String(id));
 }
 
@@ -477,6 +479,7 @@ function renderColumn(status) {
 
     attachEditButtons();
 }
+
 function attachEditButtons(){
     document.querySelectorAll(".editBtn").forEach(btn => {
         btn.onclick = () => {
@@ -511,7 +514,7 @@ function openTask(id){
 
     isModalOpen = true;
     document.getElementById("modal").classList.add("show");
-    document.getElementById("deleteTaskBtn").style.display = "block"; // Toon delete knop bij bestaande taak
+    document.getElementById("deleteTaskBtn").style.display = "block"; 
     document.getElementById("taskText").value = editingTask.text;
     document.getElementById("taskOwner").value = editingTask.owner;
     document.getElementById("taskStatus").value = editingTask.status;
@@ -524,7 +527,7 @@ function closeModal(){
     isModalOpen = false;
     document.getElementById("modal").classList.remove("show");
     document.getElementById("newComment").value = "";
-    loadTasks(); // Meteen even refreshen
+    loadTasks(); 
 }
 
 document.getElementById("cancelBtn").onclick = closeModal;
@@ -563,7 +566,7 @@ function renderComments(){
 }
 
 // =========================
-// ONE UNIFIED SAVE TASK (GEFIXT!)
+// ONE UNIFIED SAVE TASK
 // =========================
 document.getElementById("saveTaskBtn").onclick = async () => {
     const text = document.getElementById("taskText").value.trim();
@@ -576,10 +579,8 @@ document.getElementById("saveTaskBtn").onclick = async () => {
     const status = document.getElementById("taskStatus").value;
 
     if(editingTask){
-        // UPDATE bestaande taak
         await updateTask(editingTask.id, { text, owner, status });
     } else {
-        // CREATE nieuwe taak
         const maxOrder = tasks.length ? Math.max(...tasks.map(t => t.sort_order || 0)) : 0;
         await createTask({
             text,
@@ -616,7 +617,6 @@ document.getElementById("addCommentBtn").onclick = async () => {
     await addComment(editingTask.id, text);
     document.getElementById("newComment").value = "";
     
-    // Update de lokale editknop data
     await loadComments();
     renderComments();
 };
@@ -629,7 +629,7 @@ document.getElementById("addTask").onclick = () => {
     isModalOpen = true;
 
     document.getElementById("modal").classList.add("show");
-    document.getElementById("deleteTaskBtn").style.display = "none"; // Verberg delete bij nieuwe taak
+    document.getElementById("deleteTaskBtn").style.display = "none"; 
     document.getElementById("taskText").value = "";
     document.getElementById("taskOwner").value = "jonas";
     document.getElementById("taskStatus").value = "todo";
@@ -637,7 +637,7 @@ document.getElementById("addTask").onclick = () => {
 };
 
 // =========================
-// DRAG & DROP (ROBUUST MET BULK UPDATE & LOGS)
+// DRAG & DROP (VOLLEDIG GEFIXT & AFGESLOTEN)
 // =========================
 
 let isUpdatingDatabase = false;
@@ -683,14 +683,12 @@ document.querySelectorAll(".cards").forEach(container => {
             const cardId = cardEl.dataset.id;
             const newOrder = index + 1;
 
-            // 1. Update direct lokaal in de javascript 'tasks' array
             const localTask = tasks.find(t => String(t.id) === String(cardId));
             if (localTask) {
                 localTask.status = newStatus;
                 localTask.sort_order = newOrder;
             }
 
-            // 2. Voeg toe aan bulk-update lijst
             rowsToUpdate.push({
                 id: cardId,
                 status: newStatus,
@@ -698,15 +696,11 @@ document.querySelectorAll(".cards").forEach(container => {
             });
         });
 
-        // 🔥 DE FIX: Sorteer de lokale taken-lijst direct op de nieuwe sort_order!
         tasks.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-        // 3. Render direct visueel (nu met de juiste sortering!)
         renderBoard();
 
         console.log("Verzenden van bulk-update naar Supabase...", rowsToUpdate);
 
-        // 4. Stuur naar de database
         const { data, error } = await supabaseClient
             .from("kanban_tasks")
             .upsert(rowsToUpdate);
@@ -723,6 +717,7 @@ document.querySelectorAll(".cards").forEach(container => {
             console.log("=== DROP EVENT AFGEHANDELD (Auto-refresh hervat) ===");
         }, 800);
     });
+});
 
 function getDragAfterElement(container, y) {
     const draggableElements = [...container.querySelectorAll(".card:not(.dragging)")];
