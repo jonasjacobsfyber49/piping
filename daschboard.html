@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Piping Platform Kanban</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        *{
+            margin:0;
+            padding:0;
+            box-sizing:border-box;
+        }
+        body{
+            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+            background:#f6f5f2;
+            color:#2b2b2b;
+            padding:25px;
+        }
+        h1{
+            font-size:22px;
+            margin-bottom:5px;
+        }
+        .subtitle{
+            color:#777;
+            margin-bottom:20px;
+            font-size:14px;
+        }
+        .toolbar{
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:20px;
+        }
+        .filter{
+            display:flex;
+            gap:8px;
+        }
+        .filter button{
+            border:none;
+            background:white;
+            padding:8px 14px;
+            border-radius:20px;
+            cursor:pointer;
+            font-size:13px;
+            transition:.2s;
+        }
+        .filter button.active{
+            background:#222;
+            color:white;
+        }
+        #addTask{
+            margin-left:auto;
+            border:none;
+            background:#d46c45;
+            color:white;
+            border-radius:6px;
+            padding:9px 16px;
+            cursor:pointer;
+            font-weight:600;
+        }
+        .board{
+            display:grid;
+            grid-template-columns:repeat(3,1fr);
+            gap:18px;
+        }
+        .column{
+            background:#ece9df;
+            border-radius:10px;
+            padding:12px;
+            min-height:500px;
+        }
+        .column-header{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:12px;
+            font-size:13px;
+            font-weight:700;
+            text-transform:uppercase;
+            color:#666;
+        }
+        .count{
+            background:#d9d4c8;
+            padding:2px 8px;
+            border-radius:20px;
+            font-size:11px;
+        }
+        .cards{
+            min-height:350px;
+        }
+        .card{
+            background:white;
+            border-radius:8px;
+            padding:12px;
+            margin-bottom:10px;
+            cursor:grab;
+            box-shadow:0 2px 6px rgba(0,0,0,.08);
+            border-left:5px solid #ccc;
+        }
+        .card.dragging{
+            opacity:.4;
+        }
+        .card.owner-jonas{
+            border-left-color:#d46c45;
+        }
+        .card.owner-luis{
+            border-left-color:#3c7dd9;
+        }
+        .card-text{
+            white-space:pre-wrap;
+            line-height:1.45;
+            font-size:14px;
+        }
+        .card-footer{
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-top:10px;
+        }
+        .owner{
+            font-size:11px;
+            font-weight:bold;
+            text-transform:uppercase;
+        }
+        .actions{
+            display:flex;
+            gap:8px;
+        }
+        .actions button{
+            border:none;
+            background:none;
+            cursor:pointer;
+            color:#888;
+            font-size:14px;
+        }
+        .modalOverlay{
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,.45);
+            display:none;
+            align-items:center;
+            justify-content:center;
+        }
+        .modalOverlay.show{
+            display:flex;
+        }
+        .modal{
+            width:650px;
+            max-width:90vw;
+            max-height:90vh;
+            overflow:auto;
+            background:white;
+            border-radius:10px;
+            padding:20px;
+        }
+        .modal textarea{
+            width:100%;
+            min-height:120px;
+            resize:vertical;
+            margin:10px 0;
+            padding:10px;
+        }
+        .row{
+            display:flex;
+            gap:15px;
+            margin-bottom:15px;
+        }
+        .row select{
+            padding:8px;
+        }
+        .modalButtons{
+            display:flex;
+            justify-content:flex-end;
+            gap:10px;
+        }
+        .modalButtons button{
+            border:none;
+            padding:9px 16px;
+            border-radius:6px;
+            cursor:pointer;
+        }
+        .primary{
+            background:#222;
+            color:white;
+        }
+        .secondary{
+            background:#ddd;
+        }
+        .comments{
+            margin-top:25px;
+            border-top:1px solid #eee;
+            padding-top:20px;
+        }
+        .comment{
+            background:#f7f7f7;
+            border-radius:8px;
+            padding:10px;
+            margin-bottom:10px;
+        }
+        .commentAuthor{
+            font-weight:bold;
+            font-size:12px;
+            margin-bottom:4px;
+        }
+        .commentDate{
+            color:#888;
+            font-size:11px;
+        }
+        .commentText{
+            margin-top:5px;
+            white-space:pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Piping Platform</h1>
+<div class="subtitle">Shared Kanban powered by Supabase</div>
+
+<div class="toolbar">
+    <div class="filter">
+        <button class="active" data-filter="all">All</button>
+        <button data-filter="jonas">Jonas</button>
+        <button data-filter="luis">Luis</button>
+    </div>
+    <button id="addTask">+ Add Task</button>
+</div>
+
+<div class="board">
+    <div class="column" data-status="todo">
+        <div class="column-header">
+            <span>To Do</span>
+            <span class="count" id="count-todo">0</span>
+        </div>
+        <div class="cards" id="todo"></div>
+    </div>
+
+    <div class="column" data-status="inprogress">
+        <div class="column-header">
+            <span>In Progress</span>
+            <span class="count" id="count-inprogress">0</span>
+        </div>
+        <div class="cards" id="inprogress"></div>
+    </div>
+
+    <div class="column" data-status="done">
+        <div class="column-header">
+            <span>Done</span>
+            <span class="count" id="count-done">0</span>
+        </div>
+        <div class="cards" id="done"></div>
+    </div>
+</div>
+
+<div class="modalOverlay" id="modal">
+    <div class="modal">
+        <h2 id="modalTitle">Task</h2>
+        <textarea id="taskText"></textarea>
+
+        <div class="row">
+            <select id="taskOwner">
+                <option value="jonas">Jonas</option>
+                <option value="luis">Luis</option>
+            </select>
+
+            <select id="taskStatus">
+                <option value="todo">To Do</option>
+                <option value="inprogress">In Progress</option>
+                <option value="done">Done</option>
+            </select>
+        </div>
+
+        <div class="modalButtons">
+            <button class="secondary" id="deleteTaskBtn">Delete</button>
+            <button class="secondary" id="cancelBtn">Cancel</button>
+            <button class="primary" id="saveTaskBtn">Save</button>
+        </div>
+
+        <div class="comments">
+            <h3>Comments</h3>
+            <div id="commentsContainer"></div>
+            <textarea id="newComment" placeholder="Write a comment..."></textarea>
+            <div class="modalButtons">
+                <button class="primary" id="addCommentBtn">Post Comment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createClient } = supabase;
+
+const supabaseClient = createClient(
+    "https://vfpbvxjnjpqmhaioanmx.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmcGJ2eGpuanBxbWhhaW9hbm14Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxODQ4NzYsImV4cCI6MjA5OTc2MDg3Nn0.3buufHgFkTOz9heAUR9NwntOk8jWMnYsipFRf-IAPxg"
+);
+
+let tasks = [];
+let comments = [];
+let currentFilter = "all";
+let editingTask = null;
+let draggedTask = null;
+let isModalOpen = false; // Voorkomt dat auto-refresh je modal leeggooit tijdens het typen
+
+async function loadTasks() {
+    // Als de gebruiker bezig is in de modal, vernieuwen we even niet op de achtergrond
+    if (isModalOpen) return;
+
+    const { data, error } = await supabaseClient
+        .from("kanban_tasks")
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+    if (error) {
+        console.error(error);
+        return;
+    }
+
+    tasks = data || [];
+    await loadComments();
+    renderBoard();
+}
+
+async function loadComments() {
+    const { data, error } = await supabaseClient
+        .from("kanban_comments")
+        .select("*")
+        .order("created_at");
+
+    if (error) {
+        console.error(error);
+        return;
+    }
+
+    comments = data || [];
+    tasks.forEach(task => {
+        task.comments = comments.filter(c => c.task_id === task.id);
+    });
+}
+
+async function createTask(task) {
+    const { error } = await supabaseClient
+        .from("kanban_tasks")
+        .insert(task);
+
+    if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+    }
+    await loadTasks();
+}
+
+async function updateTask(id, values) {
+    const { error } = await supabaseClient
+        .from("kanban_tasks")
+        .update(values)
+        .eq("id", id);
+
+    if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+    }
+    await loadTasks();
+}
+
+async function removeTask(id) {
+    const { error } = await supabaseClient
+        .from("kanban_tasks")
+        .delete()
+        .eq("id", id);
+
+    if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+    }
+    await loadTasks();
+}
+
+async function addComment(taskId, text) {
+    const { error } = await supabaseClient
+        .from("kanban_comments")
+        .insert({
+            task_id: taskId,
+            author: "Jonas",
+            text: text
+        });
+
+    if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+    }
+    await loadTasks();
+}
+
+async function saveSortOrder(taskId, status, sortOrder) {
+    const { error } = await supabaseClient
+        .from("kanban_tasks")
+        .update({
+            status: status,
+            sort_order: sortOrder
+        })
+        .eq("id", taskId);
+
+    if (error) {
+        console.error(error);
+    }
+}
+
+function getTask(id) {
+    // Zorg voor een juiste type vergelijking (id kan string of int zijn afhankelijk van Supabase setup)
+    return tasks.find(t => String(t.id) === String(id));
+}
+
+function getComments(taskId) {
+    return comments.filter(c => String(c.task_id) === String(taskId));
+}
+
+function renderBoard() {
+    renderColumn("todo");
+    renderColumn("inprogress");
+    renderColumn("done");
+}
+
+function renderColumn(status) {
+    const container = document.getElementById(status);
+    container.innerHTML = "";
+
+    let filteredTasks = tasks.filter(t => t.status === status);
+
+    if(currentFilter !== "all"){
+        filteredTasks = filteredTasks.filter(t => t.owner === currentFilter);
+    }
+
+    document.getElementById(`count-${status}`).textContent = filteredTasks.length;
+
+    filteredTasks.forEach(task => {
+        const card = document.createElement("div");
+        card.className = `card owner-${task.owner}`;
+        card.draggable = true;
+        card.dataset.id = task.id;
+
+        const commentCount = task.comments ? task.comments.length : 0;
+
+        card.innerHTML = `
+            <div class="card-text">${escapeHtml(task.text)}</div>
+            <div class="card-footer">
+                <div class="owner">${task.owner}</div>
+                <div class="actions">
+                    ${commentCount ? `<span>💬 ${commentCount}</span>` : ""}
+                    <button class="editBtn" data-id="${task.id}">✏️</button>
+                </div>
+            </div>
+        `;
+
+        card.addEventListener("dragstart", handleDragStart);
+        card.addEventListener("dragend", handleDragEnd);
+        container.appendChild(card);
+    });
+
+    attachEditButtons();
+}
+
+function attachEditButtons(){
+    document.querySelectorAll(".editBtn").forEach(btn => {
+        btn.onclick = () => {
+            openTask(btn.dataset.id);
+        };
+    });
+}
+
+function escapeHtml(text){
+    if(!text) return "";
+    return text
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;");
+}
+
+document.querySelectorAll("[data-filter]").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-filter]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentFilter = btn.dataset.filter;
+        renderBoard();
+    });
+});
+
+// =========================
+// OPEN / CLOSE MODAL
+// =========================
+function openTask(id){
+    editingTask = getTask(id);
+    if(!editingTask) return;
+
+    isModalOpen = true;
+    document.getElementById("modal").classList.add("show");
+    document.getElementById("deleteTaskBtn").style.display = "block"; // Toon delete knop bij bestaande taak
+    document.getElementById("taskText").value = editingTask.text;
+    document.getElementById("taskOwner").value = editingTask.owner;
+    document.getElementById("taskStatus").value = editingTask.status;
+
+    renderComments();
+}
+
+function closeModal(){
+    editingTask = null;
+    isModalOpen = false;
+    document.getElementById("modal").classList.remove("show");
+    document.getElementById("newComment").value = "";
+    loadTasks(); // Meteen even refreshen
+}
+
+document.getElementById("cancelBtn").onclick = closeModal;
+document.getElementById("modal").onclick = e => {
+    if(e.target.id === "modal"){
+        closeModal();
+    }
+};
+
+// =========================
+// COMMENTS
+// =========================
+function renderComments(){
+    const container = document.getElementById("commentsContainer");
+    container.innerHTML = "";
+
+    if(!editingTask) return;
+
+    const list = getComments(editingTask.id);
+
+    if(list.length === 0){
+        container.innerHTML = "<p>No comments yet.</p>";
+        return;
+    }
+
+    list.forEach(comment => {
+        const div = document.createElement("div");
+        div.className = "comment";
+        div.innerHTML = `
+            <div class="commentAuthor">${comment.author}</div>
+            <div class="commentDate">${new Date(comment.created_at).toLocaleString()}</div>
+            <div class="commentText">${escapeHtml(comment.text)}</div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// =========================
+// ONE UNIFIED SAVE TASK (GEFIXT!)
+// =========================
+document.getElementById("saveTaskBtn").onclick = async () => {
+    const text = document.getElementById("taskText").value.trim();
+    if(text === ""){
+        alert("Task text required");
+        return;
+    }
+
+    const owner = document.getElementById("taskOwner").value;
+    const status = document.getElementById("taskStatus").value;
+
+    if(editingTask){
+        // UPDATE bestaande taak
+        await updateTask(editingTask.id, { text, owner, status });
+    } else {
+        // CREATE nieuwe taak
+        const maxOrder = tasks.length ? Math.max(...tasks.map(t => t.sort_order || 0)) : 0;
+        await createTask({
+            text,
+            owner,
+            status,
+            sort_order: maxOrder + 1
+        });
+    }
+
+    closeModal();
+};
+
+// =========================
+// DELETE
+// =========================
+document.getElementById("deleteTaskBtn").onclick = async () => {
+    if(!editingTask) return;
+    if(!confirm("Delete task?")){
+        return;
+    }
+    await removeTask(editingTask.id);
+    closeModal();
+};
+
+// =========================
+// NEW COMMENT
+// =========================
+document.getElementById("addCommentBtn").onclick = async () => {
+    if(!editingTask) return;
+
+    const text = document.getElementById("newComment").value.trim();
+    if(text === "") return;
+
+    await addComment(editingTask.id, text);
+    document.getElementById("newComment").value = "";
+    
+    // Update de lokale editknop data
+    await loadComments();
+    renderComments();
+};
+
+// =========================
+// ADD TASK TRIGGER
+// =========================
+document.getElementById("addTask").onclick = () => {
+    editingTask = null;
+    isModalOpen = true;
+
+    document.getElementById("modal").classList.add("show");
+    document.getElementById("deleteTaskBtn").style.display = "none"; // Verberg delete bij nieuwe taak
+    document.getElementById("taskText").value = "";
+    document.getElementById("taskOwner").value = "jonas";
+    document.getElementById("taskStatus").value = "todo";
+    document.getElementById("commentsContainer").innerHTML = "";
+};
+
+// =========================
+// DRAG & DROP (GEFIXT VOOR DIRECTE UI-UPDATE)
+// =========================
+function handleDragStart(e){
+    draggedTask = e.target.dataset.id;
+    e.target.classList.add("dragging");
+}
+
+function handleDragEnd(e){
+    e.target.classList.remove("dragging");
+    draggedTask = null;
+}
+
+document.querySelectorAll(".cards").forEach(container => {
+    container.addEventListener("dragover", e => {
+        e.preventDefault();
+    });
+
+    container.addEventListener("drop", async e => {
+        e.preventDefault();
+        if(!draggedTask) return;
+
+        const cardData = getTask(draggedTask);
+        if(!cardData) return;
+
+        const newStatus = container.id;
+        
+        // Update direct lokaal in het script geheugen voor een vloeiende ervaring
+        cardData.status = newStatus;
+        
+        const cards = [...container.querySelectorAll(".card")];
+        let sortOrder = cards.length ? cards.length + 1 : 1;
+        cardData.sort_order = sortOrder;
+
+        // Render direct de nieuwe situatie op het scherm
+        renderBoard();
+
+        // Stuur daarna stilletjes naar Supabase op de achtergrond
+        await saveSortOrder(cardData.id, newStatus, sortOrder);
+    });
+});
+
+// =========================
+// AUTO REFRESH (Pauzeert als modal open is)
+// =========================
+setInterval(async () => {
+    await loadTasks();
+}, 3000);
+
+// INITIAL LOAD
+loadTasks();
+
+// ESC CLOSE
+document.addEventListener("keydown", e => {
+    if(e.key === "Escape"){
+        closeModal();
+    }
+});
+</script>
+
+</body>
+</html>
